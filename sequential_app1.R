@@ -55,7 +55,7 @@ ui <- fluidPage(
                    uiOutput("setnr"),
                    DT::dataTableOutput('choice.set'),
                    uiOutput("MainAction"),
-                   actionButton("OK", "confirm")
+                   actionButton("OK", "OK")
 
          ))
 )
@@ -78,7 +78,9 @@ server<-function(input, output) {
 
     #1 explanation.
     if (input$OK == 0 )
-      return( h3("Explanation of the survey") )
+      return( h3("After the instructions you will be presented with a number of choice tasks. 
+                 Read the specifications of each alternative carefully, afterwards indicate which alternative you prefer.
+                 Continue by clicking the 'OK' button."))
 
     #2 Survey
     if (input$OK > 0 & input$OK <= n_total)
