@@ -7,7 +7,6 @@
 #libraries
 library(choice)
 library(shinyjs)
-library(choice)
 library(mgcv)
 library(plyr)
 library(DT)
