@@ -1,8 +1,10 @@
 ###
 # shiny application to run sequential designs.
-# After the presentation of the initial choice sets, parameters are,
+# After the presentation of the initial design, parameters are updated,
 # and new choice sets are generated.
 ###
+
+rm(list=ls())
 
 #libraries
 library(choice)
@@ -10,17 +12,18 @@ library(shinyjs)
 library(mgcv)
 library(plyr)
 library(DT)
+library(xlsx)
 
 ### settings choice task ######################################################################
 answer_options<-c("None","Alt A","Alt B")
 n_alts=2
-levels<-c(2,3,2)
+levels<-c(3,3,3)
 
 #level names
 names<- vector(mode="list", length(levels))
-names[[1]]<-c("$50","$100")
+names[[1]]<-c("$50","$75","$100")
 names[[2]]<-c("2min","15min","30min")
-names[[3]]<-c("bad","good")
+names[[3]]<-c("bad","average","good")
 
 #alternatives names
 alternatives<-c("Alternative  A","Alternative B")
@@ -28,15 +31,29 @@ alternatives<-c("Alternative  A","Alternative B")
 #attribute names
 attributes<-c("price","travel time","comfort")
 
-#initial design
-n_init<-10
-n_total<-15
-des<-design(lvls = levels, n_sets = n_init, n_alts = n_alts)
-des_ok<-present(design = des, lvl_names = names, n_alts = n_alts)
-
 #PRIOR
-p_mod<- c(0, 0, 0, 0)
-p_cov<- diag(c(3, 3, 3, 3))
+p_mod<- c(-1, -1, -1, -1, 1, 1)
+p_cov<- diag(c(3, 3, 3, 3, 3, 3))
+
+#design
+n_init<-8 #initial
+n_total<-14 #total
+
+### initial design (choose)
+
+#random
+#des<-design.gen(lvls = levels, n_sets = n_init, n_alts = n_alts) #random
+
+#DB efficient
+#p_samples<-MASS::mvrnorm(n = 200, mu= p_mod, Sigma=p_cov)
+#des_db<-DB_mod_fed(lvls = levels, n_sets = n_init, n_alts= n_alts, par_samples = p_samples, max_iter = 5)
+#des<-des_db[[1]]
+
+#read in
+des<-as.matrix(read.xlsx(file = "C:/Users/u0105757/Desktop/sequential design/R.code/designs/des_8(2)3.3.3.xlsx", 1))
+
+#transform
+des_ok<-present(design = des, lvl_names = names, n_alts = n_alts)
 
 ###############################################################################################
 
@@ -77,7 +94,7 @@ server<-function(input, output) {
 
     #1 explanation.
     if (input$OK == 0 )
-      return( h3("After the instructions you will be presented with a number of choice tasks. 
+      return( h3("After the instructions you will be presented with a number of choice tasks.
                  Read the specifications of each alternative carefully, afterwards indicate which alternative you prefer.
                  Continue by clicking the 'OK' button."))
 
@@ -110,14 +127,21 @@ server<-function(input, output) {
  observeEvent(input$Save, {
     if (input$Save > 0) stopApp() })
 
+#store responses
+ observeEvent(input$OK, {
+   if (input$OK > 1){
+     resp<<-c(resp, input$survey)
+     y_bin<<-map_resp(resp = resp, resp_options = answer_options, n_alts = n_alts)
+   }
+   
+   
+ })
+ 
+ 
 #produce choice set
  select_set <-eventReactive(input$OK, {
 
-  if (input$OK > 1){
-  resp<<-c(resp, input$survey)
-  y_bin<<-map_resp(resp = resp, resp_options = answer_options, n_alts = n_alts)
-  }
-
+  #initial fase
   if (input$OK > 0 & input$OK <= n_init){
 
     #select choice set.
@@ -125,27 +149,30 @@ server<-function(input, output) {
     choice.set<-t(choice.set)
 
   }
-  #sequential adaptive
+
+  #sequential adaptive fase
   else if (input$OK-1 >= n_init & input$OK <= n_total){
 
   #update parameters
-  draws<-imp_sampling(prior_mode = p_mod, prior_covar = p_cov, design = des, n_alts = n_alts, Y=y_bin)
-  w<<-draws[[2]]
-  sam<<-draws[[1]]
-
+  samples<-imp_sampling(prior_mode = p_mod, prior_covar = p_cov, design = des, n_alts = n_alts, Y=y_bin)
+  sam<<-samples[[1]]
+  w<<-samples[[2]]
+  post_mode<<-samples[[3]]
+  post_covar<<-samples[[4]]
+  
   #new set based on updated parameters
   new_set<-DB_seq_fed(design = des, lvls = levels, n_alts = n_alts, par_samples = sam, weights = w,
                               prior_covar = p_cov)
 
   #update
   des<<-rbind(des, new_set)
-  p_mod<<-modes(samples = sam, weights = w, s=15)
 
   choice.set<<-present(design = new_set, lvl_names = names, n_alts = n_alts)
   choice.set<<-t(choice.set[, 1:n_att])
 
 
   }
+  
   else{}
 
   #Fill in attribute names and alternatives names
@@ -153,8 +180,7 @@ server<-function(input, output) {
   rownames(choice.set) <- attributes
 
   return(choice.set)
-
-
+  
   })
 
 #plot choice set
