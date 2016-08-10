@@ -2,6 +2,7 @@
 # shiny application to run sequential designs.
 # After the presentation of the initial design, parameters are updated,
 # and new choice sets are generated.
+# Results are saved on dropbox account.
 ###
 
 rm(list=ls())
@@ -13,11 +14,13 @@ library(mgcv)
 library(plyr)
 library(DT)
 library(xlsx)
+library(rdrop2)
 
 ### settings choice task ######################################################################
 answer_options<-c("None","Alt A","Alt B")
 n_alts=2
 levels<-c(3,3,3)
+outputDir <- "responses"
 
 #level names
 names<- vector(mode="list", length(levels))
@@ -36,13 +39,13 @@ p_mod<- c(-1, -1, -1, -1, 1, 1)
 p_cov<- diag(c(3, 3, 3, 3, 3, 3))
 
 #design
-n_init<-8 #initial
-n_total<-14 #total
+n_init<-5 #initial
+n_total<-5 #total
 
 ### initial design (choose)
 
 #random
-#des<-design.gen(lvls = levels, n_sets = n_init, n_alts = n_alts) #random
+des<-design.gen(lvls = levels, n_sets = n_init, n_alts = n_alts) #random
 
 #DB efficient
 #p_samples<-MASS::mvrnorm(n = 200, mu= p_mod, Sigma=p_cov)
@@ -50,7 +53,7 @@ n_total<-14 #total
 #des<-des_db[[1]]
 
 #read in
-des<-as.matrix(read.xlsx(file = "C:/Users/u0105757/Desktop/sequential design/R.code/designs/des_8(2)3.3.3.xlsx", 1))
+#des<-as.matrix(read.xlsx(file = "C:/Users/u0105757/Desktop/sequential design/R.code/designs/des_8(2)3.3.3.xlsx", 1))
 
 #transform
 des_ok<-present(design = des, lvl_names = names, n_alts = n_alts)
@@ -94,10 +97,13 @@ server<-function(input, output) {
 
     #1 explanation.
     if (input$OK == 0 )
-      return( h3("After the instructions you will be presented with a number of choice tasks.
+    return(
+        list(h3("After the instructions you will be presented with a number of choice tasks.
                  Read the specifications of each alternative carefully, afterwards indicate which alternative you prefer.
-                 Continue by clicking the 'OK' button."))
-
+                 Continue by clicking the 'OK' button. Before continuing please fill in your student ID below."),
+             textInput("ID", "student ID:")))
+    
+    
     #2 Survey
     if (input$OK > 0 & input$OK <= n_total)
       return(list(
@@ -109,7 +115,7 @@ server<-function(input, output) {
     if (input$OK > n_total)
        return(list(
          h4("Thanks for taking the survey!"),
-         actionButton('Save', 'click to end the survey'),
+         actionButton('Save', 'Save and Quit'),
          br()))
 
   })
@@ -136,7 +142,6 @@ server<-function(input, output) {
    
    
  })
- 
  
 #produce choice set
  select_set <-eventReactive(input$OK, {
@@ -198,7 +203,27 @@ server<-function(input, output) {
 
    if (input$OK > 0 & input$OK <= n_total){paste(h5("set: ", input$OK))}
  })
+ 
+#Save data
+ saveData <- function(d, Y) {
+
+   data<-cbind(d, Y)
+   # Create a unique file name
+   fileName <- sprintf("%s_%s.csv", n_alts, input$ID)
+   
+   # Write the data to a temporary file locally
+   filePath <- file.path(tempdir(), fileName)
+   write.csv(data, filePath, row.names = FALSE, quote = TRUE)
+   
+   # Upload the file to Dropbox
+   drop_upload(filePath, dest = outputDir)
+ }
+ observeEvent(input$Save, {
+   saveData(d = des, Y= y_bin )
+
+ })
 
 }
+
 
 shinyApp(ui, server)
