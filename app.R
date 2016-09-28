@@ -1,7 +1,6 @@
 ###
 # shiny application to run sequential designs.
-# After the presentation of the initial design, parameters are updated,
-# and new choice sets are generated.
+# choice sets are generated adaptively sequentially using the KL criterion
 # Results are saved on dropbox account.
 ###
 
@@ -209,7 +208,6 @@ server<-function(input, output) {
 
 
 shinyApp(ui, server)
-
 
 
 
