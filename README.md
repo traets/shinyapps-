@@ -1,2 +1,0 @@
-# shinyapps-
-R shiny scripts  
