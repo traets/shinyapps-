@@ -1,0 +1,110 @@
+############################################################################
+#IASB shiny application for one respondent.
+#Generates efficient choice sets based on the Kullback-Leibler criterion.
+#Settings for the DCE can be changed in the settings section.
+############################################################################
+
+#Libraries
+library(idefix) #For IASB functions
+library(shiny)  #For interactive environment
+
+### Settings #################################### 
+#Alternatives names
+alternatives <- c("Alternative A","Alternative B")
+#Attribute names
+attributes <- c("price", "travel time", "comfort")
+#Attribute levels 
+attlvls <- c(3, 3, 3)
+#Alternative constants
+alt.cte <- c(0,0)
+#Level names
+names <- vector(mode="list", length(attlvls))
+names[[1]] <- c("$50","$75","$100")
+names[[2]] <- c("2 min","15 min","30 min")
+names[[3]] <- c("bad","average","good")
+#Prior 
+p.mean <- c(-1, -1, -1, -1, 1, 1)
+var <- 3
+p.cov <- diag(rep(var, length(p.mean)))
+#Total sets for respondent
+n.tot <- 10
+#Coding of the design
+code <- c("E", "E", "E")
+#Text presentented above respons options
+buttonstext <- "Please select the option you prefer:"
+#################################################
+
+#Initialize 
+des = matrix()
+y.bin = vector("numeric")
+resp = vector("character")
+cs <- Profiles(lvls = attlvls, coding = code)    # all possible profiles
+n.att <- length(attributes)
+n.alts <- length(alternatives)
+buttons <- NULL 
+
+################
+### Shiny  #####
+################
+
+###User interface
+ui <- fluidPage(
+  #Put design on screen
+  tableOutput("choice.set"),
+  #Put answer options on screen
+  uiOutput('buttons'), 
+  #Put action button on screen
+  actionButton("OK", "OK")
+)
+###Server
+server <- function(input, output) {
+  # Set selection function
+  Select <- function (){
+    #First set
+    if (all(is.na(des))) {
+      #Draw samples from prior
+      s <- MASS::mvrnorm(n = 10, mu = p.mean, Sigma  = p.cov)
+      w <- rep(1, nrow(s)) / nrow(s)
+      #From second set
+    } else {
+      # Draw samples from updated posterior
+      sam <- ImpsampMNL(prior.mean = p.mean, prior.covar = p.cov, des = des, n.alts = n.alts, y = y.bin, m = 6)
+      s <- sam$samples
+      w <- sam$weights
+    }
+    #Select new set based on KL info
+    set <- SeqKL(cand.set = cs, n.alts = n.alts, par.draws = s, alt.cte = alt.cte, weights = w)$set
+    #Design storage
+    ifelse (is.na(des), des <<- set, des <<- rbind(des, set)) 
+    #Transform coded set to attribute level character set.
+    choice.set <- Decode(set = set, lvl.names = names, coding = code, alt.cte = alt.cte)
+    choice.set <- t(choice.set[, 1:n.att])
+    # Fill in attribute names and alternatives names
+    colnames(choice.set) <- alternatives
+    rownames(choice.set) <- attributes
+    #return choice set
+    return(choice.set)
+  }
+  #When action button is clicked
+  observeEvent(input$OK, {
+    #Plot new choice set
+    output$choice.set <-  renderTable(Select(), rownames = TRUE)
+    #Store responses
+    if (input$OK > 1) {
+      resp <<- c(resp, input$survey)
+      y.bin <<- Charbin(resp = resp, alts = alternatives, n.alts = n.alts)
+    } else {buttons <- NULL}
+  })
+  #Output response options after first action button click
+  output$buttons <- renderUI({
+    # radiobuttons
+    if (input$OK > 0) {
+      return(list(radioButtons("survey", buttonstext,
+                               alternatives , inline = T, selected = "None")))
+    }
+  })
+}
+shinyApp(ui, server)
+
+
+
